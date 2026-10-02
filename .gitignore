@@ -15,3 +15,9 @@ frontend/node_modules/
 
 # Logs
 *.log
+
+# Desktop (Tauri) build artifacts
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+desktop/src-tauri/gen/
+desktop/node_modules/

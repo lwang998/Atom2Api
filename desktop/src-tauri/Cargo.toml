@@ -1,0 +1,17 @@
+[package]
+name = "atom2api-desktop"
+version = "1.0.10"
+description = "Atom2Api desktop shell: runs the atom2api server as a sidecar and shows its console"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+
+[profile.release]
+strip = true
+panic = "abort"
+codegen-units = 1
