@@ -226,6 +226,7 @@ func TestRequestRetryConfigValidation(t *testing.T) {
 		t.Fatal("validateConfig accepted more than 10 retries")
 	}
 	config.RequestRetryCount = 1
+	config.RetryStatusCodes = ""
 	if err := validateConfig(config); err == nil {
 		t.Fatal("validateConfig accepted retries without status codes")
 	}

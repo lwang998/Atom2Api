@@ -21,7 +21,7 @@ import (
 
 const (
 	defaultConfigPath       = "config.json"
-	defaultUserAgent        = "atomcode/5.0.2"
+	defaultUserAgent        = "atomcode/5.2.0"
 	defaultListenAddress    = ":8080"
 	defaultDataPath         = "data/atom2api.db"
 	defaultAdminPassword    = "atom2api"
@@ -190,7 +190,9 @@ func defaultConfig() (Config, error) {
 		PlatformBaseURL:    defaultPlatformBaseURL,
 		CodingPlanAPIURL:   defaultCodingPlanAPIURL,
 		GatewayURL:         defaultGatewayURL,
-		RequestTimeoutSecs: 120,
+		RequestTimeoutSecs: 600,
+		RequestRetryCount:  3,
+		RetryStatusCodes:   "429",
 	}
 	if _, err := normalizeConfig(&config); err != nil {
 		return Config{}, err
@@ -228,7 +230,7 @@ func normalizeConfig(config *Config) (bool, error) {
 	config.AdminPassword = normalizedPassword
 	changed = changed || passwordChanged
 	if config.RequestTimeoutSecs == 0 {
-		config.RequestTimeoutSecs = 120
+		config.RequestTimeoutSecs = 600
 		changed = true
 	}
 	if config.AuditRetentionDays == 0 {

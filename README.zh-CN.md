@@ -141,9 +141,9 @@ curl http://localhost:8080/v1/chat/completions \
 | `audit_debug_enabled` | `false` | 开启后记录完整请求/响应正文及脱敏 Header |
 | `audit_retention_days` | `30` | 手动清理完整请求审计记录时默认使用的保留天数 |
 | `audit_detail_retention_days` | `30` | 手动清理请求/响应正文、Header、错误和重试详情时默认使用的保留天数 |
-| `request_timeout_seconds` | `120` | 上游请求超时范围 5-600 秒 |
-| `request_retry_count` | `0` | 命中指定上游 HTTP 状态码后的重试次数，范围 0-10；0 表示不重试 |
-| `request_retry_status_codes` | 空 | 逗号分隔的状态码或范围，例如 `400-500,503,429`；重叠和相邻项会自动归并 |
+| `request_timeout_seconds` | `600` | 上游请求超时范围 5-600 秒 |
+| `request_retry_count` | `3` | 命中指定上游 HTTP 状态码后的重试次数，范围 0-10；0 表示不重试 |
+| `request_retry_status_codes` | `429` | 逗号分隔的状态码或范围，例如 `400-500,503,429`；重叠和相邻项会自动归并 |
 
 所有运行状态均写入 `data_path` 指向的 SQLite 数据库，包括账号、API Key、模型设置、领取日志，以及用于仪表盘聚合的最近 50,000 条请求记录。启动时如发现旧 JSON 状态文件及其 `<data_path>.usage.ndjson` 日志，会在事务中自动迁入数据库，并仅在事务提交成功后删除旧文件。默认只记录请求元数据与用量；开启审计调试模式后才保存请求/响应正文和 Header。无论调试模式是否开启，上游返回非 200 状态时都会保存其响应正文和 Header。重试不会创建新的审计记录，原记录会显示重试次数，并保存每次尝试的响应正文和脱敏 Header。认证、Cookie、Token、API Key 及签名 Header 的值会被脱敏。
 

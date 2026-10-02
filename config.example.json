@@ -1,5 +1,5 @@
 {
-  "user_agent": "atomcode/5.0.2",
+  "user_agent": "atomcode/5.2.0",
   "listen_address": ":8080",
   "data_path": "data/atom2api.db",
   "admin_password": "change-this-password",
@@ -11,7 +11,7 @@
   "system_prompt": "You are AtomCode, an AI coding agent by AtomGit running the {model} model.\nWhen asked who or what model you are, identify yourself as AtomCode running {model}.\nNever claim to be Claude, ChatGPT, or another product, organization, or model.\nYou help users with software engineering tasks within the current project.",
   "audit_retention_days": 30,
   "audit_detail_retention_days": 30,
-  "request_timeout_seconds": 120,
-  "request_retry_count": 0,
-  "request_retry_status_codes": ""
+  "request_timeout_seconds": 600,
+  "request_retry_count": 3,
+  "request_retry_status_codes": "429"
 }
