@@ -126,6 +126,26 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model":"deepseek-v4-flash","stream":true,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
+## Anthropic (Claude) API
+
+Atom2Api also exposes an Anthropic Messages API compatible endpoint, so Claude Code, Cherry Studio (Anthropic channel), and other Anthropic-protocol clients work unchanged:
+
+- **Base URL**: `http://localhost:8080` (clients append `/v1/messages` automatically)
+- **API Key**: the same `sk-atom2-*` key used by the OpenAI endpoints; both `x-api-key` and `Authorization: Bearer` headers are accepted
+- **Models**: the same list as shown in model management
+
+curl example:
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H "x-api-key: sk-atom2-your-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-v4-flash","max_tokens":1024,"messages":[{"role":"user","content":"hello"}]}'
+```
+
+Requests, responses, and streaming SSE are fully translated to the Anthropic protocol: `stop_reason` is mapped automatically (`length` → `max_tokens`, `tool_calls` → `tool_use`, otherwise `end_turn`), reasoning content is returned as `thinking` blocks, and tool calls map to `tool_use`/`tool_result` blocks. Errors use the standard Anthropic envelope; upstream overload (529/503) returns `overloaded_error`, and no available account returns 429. `POST /v1/messages/count_tokens` estimates the input token count at roughly 4 characters per token without contacting the upstream.
+
 ## Configuration
 
 | Field | Default | Description |

@@ -109,6 +109,8 @@ func main() {
 	mux.HandleFunc("GET /api/auth/status", adminAuth.HandleStatus)
 	mux.Handle("/api/", adminAuth.Require(adminMux))
 	mux.HandleFunc("GET /v1/models", api.RequireAPIKey(proxy.HandleModels))
+	mux.HandleFunc("POST /v1/messages", api.RequireAPIKey(proxy.HandleAnthropicMessages))
+	mux.HandleFunc("POST /v1/messages/count_tokens", api.RequireAPIKey(proxy.HandleAnthropicCountTokens))
 	for _, route := range []string{
 		"POST /v1/chat/completions", "POST /v1/responses", "POST /v1/completions", "POST /v1/embeddings",
 	} {

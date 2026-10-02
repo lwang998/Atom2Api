@@ -301,10 +301,11 @@ func modelFamily(upstream string) string {
 	return ""
 }
 
+// accountEligibleForModel applies plan-tier policy on top of the upstream
+// plan_available flag. Only the GLM-5.2 family is tier-restricted; other
+// families (glm5.3-flash, qwen, etc.) are served to Lite accounts upstream
+// too — gating them here empties the candidate pool with a bogus 429.
 func accountEligibleForModel(account Account, upstream string) bool {
-	if accountPlanTier(account) == "lite" && modelFamily(upstream) != "deepseek" {
-		return false
-	}
 	if modelFamily(upstream) == "glm" {
 		tier := accountPlanTier(account)
 		return tier == "pro" || tier == "max"

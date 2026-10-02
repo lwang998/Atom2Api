@@ -126,6 +126,26 @@ curl http://localhost:8080/v1/chat/completions \
   -d '{"model":"deepseek-v4-flash","stream":true,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
+## Anthropic（Claude）接口
+
+Atom2Api 同时提供 Anthropic Messages API 兼容端点，Claude Code、Cherry Studio（Anthropic 渠道）等客户端可直接接入：
+
+- **Base URL**：`http://localhost:8080`（客户端会自动拼接 `/v1/messages`）
+- **API Key**：与 OpenAI 接口相同的 `sk-atom2-*` 密钥，支持 `x-api-key` 或 `Authorization: Bearer` 两种鉴权头
+- **模型**：与「模型管理」中列表一致
+
+curl 示例：
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H "x-api-key: sk-atom2-your-key" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-v4-flash","max_tokens":1024,"messages":[{"role":"user","content":"hello"}]}'
+```
+
+请求、响应与流式 SSE 会全量翻译为 Anthropic 协议：`stop_reason` 自动映射（`length`→`max_tokens`、`tool_calls`→`tool_use`、其余→`end_turn`），思考内容以 `thinking` 内容块返回，工具调用转换为 `tool_use`/`tool_result` 内容块。错误返回 Anthropic 标准信封，上游过载（529/503）返回 `overloaded_error`，无可用账号时返回 429。`POST /v1/messages/count_tokens` 按约 4 字符 = 1 token 估算输入 token 数，不消耗上游额度。
+
 ## 配置
 
 | 字段 | 默认值 | 说明 |
