@@ -31,7 +31,6 @@ function settingsForm(response: SettingsResponse): SettingsForm {
   };
 }
 
-const defaultRepositoryURL = 'https://github.com/lwang998/Atom2Api';
 const maxAuditRetentionDays = 36500;
 
 function displayVersion(value?: string) {
@@ -249,7 +248,7 @@ export default function SettingsPage() {
     form.audit_detail_retention_days !== settings?.audit_detail_retention_days ||
     Boolean(adminPassword) || Boolean(signerToken)
   );
-  const repositoryURL = versionInfo?.repository_url || defaultRepositoryURL;
+  const repositoryURL = versionInfo?.repository_url || '';
   const developmentBuild = versionInfo?.current_version === 'dev';
 
   return (
@@ -272,7 +271,7 @@ export default function SettingsPage() {
               <div><dt className="text-xs text-zinc-500">最近检查</dt><dd className="mt-1 text-sm font-medium text-zinc-800" title={versionInfo?.checked_at}>{versionInfo?.checked_at ? formatDateTime(versionInfo.checked_at) : '尚未检查'}</dd></div>
             </dl>
             <dl className="border-t border-zinc-100 px-5 py-4 sm:px-6">
-              <div className="grid gap-1 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center"><dt className="text-xs text-zinc-500">GitHub 仓库</dt><dd className="min-w-0"><a className="inline-flex max-w-full items-center gap-1.5 break-all font-mono text-xs font-medium text-blue-600 hover:text-blue-800" href={repositoryURL} rel="noreferrer" target="_blank"><span>{repositoryURL}</span><ExternalLink className="shrink-0" size={14} /></a></dd></div>
+              {repositoryURL ? <div className="grid gap-1 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center"><dt className="text-xs text-zinc-500">GitHub 仓库</dt><dd className="min-w-0"><a className="inline-flex max-w-full items-center gap-1.5 break-all font-mono text-xs font-medium text-blue-600 hover:text-blue-800" href={repositoryURL} rel="noreferrer" target="_blank"><span>{repositoryURL}</span><ExternalLink className="shrink-0" size={14} /></a></dd></div> : null}
             </dl>
             <div className="border-t border-zinc-100 px-5 py-4 sm:px-6">
               {versionRequestError || versionInfo?.check_error ? <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700" role="alert"><AlertCircle className="mt-0.5 shrink-0" size={16} /><span>更新检查失败：{versionRequestError || versionInfo?.check_error}</span></div>

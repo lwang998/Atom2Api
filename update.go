@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const (
+// Overridable at build time via -ldflags "-X main.githubLatestReleaseURL=
+// -X main.githubRepositoryURL=" to produce a distribution without any GitHub
+// address; empty values disable the online update check entirely.
+var (
 	githubLatestReleaseURL = "https://api.github.com/repos/lwang998/Atom2Api/releases/latest"
 	githubRepositoryURL    = "https://github.com/lwang998/Atom2Api"
 	releaseCheckSuccessTTL = 30 * time.Minute
@@ -97,6 +100,12 @@ func (c *ReleaseChecker) check(ctx context.Context, force bool) VersionInfo {
 		CurrentVersion: c.currentVersion,
 		RepositoryURL:  githubRepositoryURL,
 		CheckedAt:      now.Format(time.RFC3339),
+	}
+	if c.releaseURL == "" {
+		// Update checks are compiled out of this distribution.
+		c.cached = info
+		c.expiresAt = now.Add(c.successTTL)
+		return info
 	}
 	release, err := c.fetchLatestRelease(ctx)
 	ttl := c.successTTL
