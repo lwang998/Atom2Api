@@ -96,6 +96,12 @@ func anthropicErrorType(status int) string {
 
 func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request, key APIKey) {
 	started := time.Now()
+	var firstTokenAt time.Time
+	markFirstToken := func() {
+		if firstTokenAt.IsZero() {
+			firstTokenAt = time.Now()
+		}
+	}
 	requestID := randomID("req")
 	w.Header().Set("X-Request-Id", requestID)
 	config := p.config.Snapshot()
@@ -108,6 +114,10 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request, 
 	}
 	defer func() {
 		audit.LatencyMS = time.Since(started).Milliseconds()
+		if audit.Streaming && !firstTokenAt.IsZero() {
+			audit.FirstTokenLatencyMS = firstTokenAt.Sub(started).Milliseconds()
+			audit.CompletionLatencyMS = time.Since(firstTokenAt).Milliseconds()
+		}
 		audit.Status = captured.status
 		if audit.Status == 0 {
 			audit.Status = http.StatusInternalServerError
@@ -235,7 +245,7 @@ func (p *Proxy) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if req.Stream {
-		usage, errorText := p.streamAnthropicResponse(w, response, route.Requested)
+		usage, errorText := p.streamAnthropicResponse(w, response, route.Requested, markFirstToken)
 		audit.InputTokens, audit.OutputTokens = usage.Input, usage.Output
 		audit.Error = errorText
 		return
@@ -516,7 +526,7 @@ func (e *anthropicEmitter) closeBlock() {
 	e.blockIdx++
 }
 
-func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Response, model string) (tokenUsage, string) {
+func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Response, model string, markFirstToken func()) (tokenUsage, string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeAnthropicError(w, http.StatusInternalServerError, "api_error", "streaming is not supported by this server")
@@ -573,6 +583,9 @@ func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Re
 		if bytes.HasPrefix(trimmed, []byte("data:")) {
 			data := bytes.TrimSpace(bytes.TrimPrefix(trimmed, []byte("data:")))
 			if len(data) > 0 && !bytes.Equal(data, []byte("[DONE]")) {
+				if streamChunkHasOutput(data) {
+					markFirstToken()
+				}
 				chunkUsage, chunkStop := emitter.translateChunk(data)
 				if chunkUsage.Input > 0 || chunkUsage.Output > 0 {
 					usage = chunkUsage

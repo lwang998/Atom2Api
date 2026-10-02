@@ -1,9 +1,11 @@
 package main
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAnthropicToChatPayloadConvertsBlocksAndTools(t *testing.T) {
@@ -59,12 +61,18 @@ func TestAnthropicStreamTranslationEmitsAnthropicEvents(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	proxy := &Proxy{}
-	usage, errorText := proxy.streamAnthropicResponse(recorder, resp, "glm5.3-flash")
+	firstTokenMarks := 0
+	usage, errorText := proxy.streamAnthropicResponse(recorder, resp, "glm5.3-flash", func() {
+		firstTokenMarks++
+	})
 	if errorText != "" {
 		t.Fatalf("errorText = %q", errorText)
 	}
 	if usage.Input != 12 || usage.Output != 34 {
 		t.Fatalf("usage = %#v", usage)
+	}
+	if firstTokenMarks == 0 {
+		t.Fatal("markFirstToken was never called for a stream with output deltas")
 	}
 
 	var events []string
@@ -89,5 +97,56 @@ func TestAnthropicStreamTranslationEmitsAnthropicEvents(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("stream missing %s in:\n%s", want, joined)
 		}
+	}
+}
+
+func TestAnthropicMessagesRecordsStreamingLatency(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: " + `{"choices":[{"delta":{"content":"Hello"}}]}` + "\n\n"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(60 * time.Millisecond)
+		_, _ = w.Write([]byte("data: " + `{"choices":[{"delta":{},"finish_reason":"end_turn"}],"usage":{"prompt_tokens":5,"completion_tokens":7}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer upstream.Close()
+
+	config, store := newTestStore(t)
+	addTestAccount(t, store, upstream.URL)
+	_, secret, err := store.CreateAPIKey("latency", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := NewProxy(config, store, NewModelRouter(store), nil)
+	api := NewAPI(store, nil, nil, proxy.router, proxy)
+
+	requestBody := `{"model":"upstream-model","max_tokens":32,"stream":true,"messages":[{"role":"user","content":"hi"}]}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(requestBody))
+	request.Header.Set("X-API-Key", secret)
+	response := httptest.NewRecorder()
+	api.RequireAPIKey(proxy.HandleAnthropicMessages).ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+
+	records := store.UsageRecords()
+	if len(records) != 1 {
+		t.Fatalf("usage records = %#v", records)
+	}
+	record := records[0]
+	if !record.Streaming {
+		t.Fatal("record.Streaming = false, want true")
+	}
+	if record.CompletionLatencyMS < 30 {
+		t.Fatalf("CompletionLatencyMS = %d, want >= 30 (first-token timing not recorded)", record.CompletionLatencyMS)
+	}
+	if record.LatencyMS < record.CompletionLatencyMS {
+		t.Fatalf("LatencyMS = %d < CompletionLatencyMS = %d", record.LatencyMS, record.CompletionLatencyMS)
+	}
+	if record.InputTokens != 5 || record.OutputTokens != 7 {
+		t.Fatalf("tokens = %d/%d, want 5/7", record.InputTokens, record.OutputTokens)
 	}
 }
