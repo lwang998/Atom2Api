@@ -24,6 +24,7 @@ Atom2Api 将 AtomGit Coding Plan 账号统一转换为可供外部应用调用�
 - AtomGit broker OAuth：启动授权、轮询状态、交换 token、提前 5 分钟自动刷新
 - Coding Plan：按 `Max -> Pro -> Lite` 领取，读取订阅类型、滚动额度、到期时间、模型目录和 60 天用量
 - OpenAI 兼容端点：`/v1/models`、`/v1/chat/completions`、`/v1/responses`、`/v1/completions`、`/v1/embeddings`
+- Anthropic 兼容端点：`/v1/messages`、`/v1/messages/count_tokens`，Claude Code、Cherry Studio 等客户端直连（见下文）
 - 流式代理：SSE 即时转发，自动请求 `include_usage`，记录输入、输出、缓存和推理 tokens
 - 多账号路由：支持按请求随机轮询，或按 API Key + 模型填充固定账号
 - 账号凭据迁移：从账号管理导出 OAuth 凭据包，在另一台设备导入并自动同步账号
@@ -145,6 +146,23 @@ curl http://localhost:8080/v1/messages \
 ```
 
 请求、响应与流式 SSE 会全量翻译为 Anthropic 协议：`stop_reason` 自动映射（`length`→`max_tokens`、`tool_calls`→`tool_use`、其余→`end_turn`），思考内容以 `thinking` 内容块返回，工具调用转换为 `tool_use`/`tool_result` 内容块。错误返回 Anthropic 标准信封，上游过载（529/503）返回 `overloaded_error`，无可用账号时返回 429。`POST /v1/messages/count_tokens` 按约 4 字符 = 1 token 估算输入 token 数，不消耗上游额度。
+
+Claude Code 接入示例（其它 Anthropic 协议客户端同理，填同样的 Base URL 和密钥即可）：
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8080
+export ANTHROPIC_AUTH_TOKEN=sk-atom2-your-key
+claude --model deepseek-v4-flash
+```
+
+### 工具调用修复记录（2026-10-02）
+
+- **流式 tool_use 参数修复**：上游 OpenAI 流式 `tool_calls` 分片现按 `index` 缓冲，流结束后统一补发 `content_block_start` / `input_json_delta` / `content_block_stop`，参数 JSON 不再丢失或串流；并行多工具调用的参数各归其位，带参数工具（如执行命令、读写文件）在 Claude Code / Paseo 中恢复正常。此前症状为所有带参数工具报 `required parameter missing`，无参数工具正常。对应 commit `ccfc03b`。
+- **工具 schema 修复**：转换上游工具定义时优先透传 Anthropic `input_schema`，缺失时回退到空 object schema。对应 commit `ccfc03b`。
+- **非流式参数映射加固**：OpenAI `arguments` 字符串正确映射为 Anthropic `input` 对象；上游返回损坏 JSON 时保留 `{"_raw_arguments": "原始文本"}` 证据，不再静默替换为空对象（避免"参数丢失"无迹可查）。对应 commit `52ce32f`。
+- **配套修复**：`/v1/models` 按 API Key 的模型白名单过滤并兼容 `[1m]` 上下文后缀（`ccfc03b`、`f030e59`）；流式请求的审计记录补充首字与完成耗时（`1fee2e3`）。
+
+上述修复包含在 `1.0.10+52ce32f` 及之后的构建中（`GET /api/health` 的 `version` 字段可确认）。回归测试覆盖交错流式分片、非流式映射与坏参数留证，见 `anthropic_test.go` 与 `anthropic_stream_test.go`，运行 `go test ./...` 验证。
 
 ## 配置
 

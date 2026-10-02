@@ -24,6 +24,7 @@ Atom2Api exposes AtomGit Coding Plan accounts through an OpenAI-compatible API f
 - AtomGit broker OAuth: starts authorization, polls status, exchanges tokens, and automatically refreshes them five minutes before expiry
 - Coding Plan: claims plans in `Max -> Pro -> Lite` order and reads subscription type, rolling quota, expiry time, model catalog, and 60-day usage
 - OpenAI-compatible endpoints: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/completions`, and `/v1/embeddings`
+- Anthropic-compatible endpoints: `/v1/messages` and `/v1/messages/count_tokens` for direct Claude Code, Cherry Studio, and other Anthropic-protocol clients (see below)
 - Streaming proxy: forwards SSE in real time, automatically requests `include_usage`, and records input, output, cached, and reasoning tokens
 - Multi-account routing: supports per-request random routing or sticky per-key, per-model account filling
 - Account credential migration: exports an OAuth credential bundle from Accounts and imports it on another device before synchronizing the account
@@ -145,6 +146,23 @@ curl http://localhost:8080/v1/messages \
 ```
 
 Requests, responses, and streaming SSE are fully translated to the Anthropic protocol: `stop_reason` is mapped automatically (`length` → `max_tokens`, `tool_calls` → `tool_use`, otherwise `end_turn`), reasoning content is returned as `thinking` blocks, and tool calls map to `tool_use`/`tool_result` blocks. Errors use the standard Anthropic envelope; upstream overload (529/503) returns `overloaded_error`, and no available account returns 429. `POST /v1/messages/count_tokens` estimates the input token count at roughly 4 characters per token without contacting the upstream.
+
+Claude Code example (other Anthropic-protocol clients work the same way — point them at the same Base URL and key):
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8080
+export ANTHROPIC_AUTH_TOKEN=sk-atom2-your-key
+claude --model deepseek-v4-flash
+```
+
+### Tool call fixes (2026-10-02)
+
+- **Streaming `tool_use` parameter fix**: upstream OpenAI streaming `tool_calls` fragments are now buffered by `index` and emitted once the stream completes as `content_block_start` / `input_json_delta` / `content_block_stop`, so parameter JSON is no longer dropped or interleaved; parallel tool calls keep their arguments separate, and parameterized tools (shell commands, file reads/writes) work again in Claude Code / Paseo. The previous symptom was every parameterized tool failing with `required parameter missing` while parameter-free tools worked. Commit `ccfc03b`.
+- **Tool schema fix**: tool definitions sent upstream now prefer the Anthropic `input_schema`, falling back to an empty object schema when absent. Commit `ccfc03b`.
+- **Non-streaming parameter mapping hardening**: the OpenAI `arguments` string maps correctly to the Anthropic `input` object; when upstream returns malformed JSON, the response preserves the raw text as `{"_raw_arguments": "..."}` instead of silently substituting an empty object (so "missing parameter" reports are no longer untraceable). Commit `52ce32f`.
+- **Related fixes**: `/v1/models` filters by the API key's model allowlist and tolerates the `[1m]` context suffix (`ccfc03b`, `f030e59`); streaming request audit records now capture first-token and completion latency (`1fee2e3`).
+
+The fixes above ship in builds `1.0.10+52ce32f` and later (visible in the `version` field of `GET /api/health`). Regression tests cover interleaved streaming fragments, non-streaming mapping, and malformed-argument evidence; see `anthropic_test.go` and `anthropic_stream_test.go`, verified with `go test ./...`.
 
 ## Configuration
 
