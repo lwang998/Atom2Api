@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	githubLatestReleaseURL = "https://api.github.com/repos/cnluminous/Atom2Api/releases/latest"
-	githubRepositoryURL    = "https://github.com/cnluminous/Atom2Api"
+	githubLatestReleaseURL = "https://api.github.com/repos/lwang998/Atom2Api/releases/latest"
+	githubRepositoryURL    = "https://github.com/lwang998/Atom2Api"
 	releaseCheckSuccessTTL = 30 * time.Minute
 	releaseCheckFailureTTL = 5 * time.Minute
 )

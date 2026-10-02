@@ -44,7 +44,7 @@ func TestReleaseCheckerReturnsLatestReleaseAndCaches(t *testing.T) {
 			t.Errorf("User-Agent = %q", got)
 		}
 		writeJSON(w, http.StatusOK, githubRelease{
-			TagName: "v1.1.0", HTMLURL: "https://github.com/cnluminous/Atom2Api/releases/tag/v1.1.0",
+			TagName: "v1.1.0", HTMLURL: "https://github.com/lwang998/Atom2Api/releases/tag/v1.1.0",
 			Body: "## Changes\n\n- Added update checks", PublishedAt: "2026-08-03T01:02:03Z",
 		})
 	}))

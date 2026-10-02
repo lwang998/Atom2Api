@@ -31,7 +31,7 @@ function settingsForm(response: SettingsResponse): SettingsForm {
   };
 }
 
-const defaultRepositoryURL = 'https://github.com/cnluminous/Atom2Api';
+const defaultRepositoryURL = 'https://github.com/lwang998/Atom2Api';
 const maxAuditRetentionDays = 36500;
 
 function displayVersion(value?: string) {
