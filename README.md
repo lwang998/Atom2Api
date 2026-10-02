@@ -91,6 +91,18 @@ Copy-Item config.example.json config.json
 go run .
 ```
 
+## Packaging
+
+A one-shot packaging script at the repository root produces the combined desktop + server Windows package (output in `dist/`). **The default build keeps the GitHub update-check links**:
+
+```powershell
+.\package.ps1 -Version 1.0.12                # standard package (GitHub update check included)
+.\package.ps1 -Version 1.0.12 -NoGitHub      # distribution build: no GitHub address, no update check
+.\package.ps1 -Version 1.0.12 -SkipFrontend -SkipDesktop   # reuse the previous frontend/desktop build
+```
+
+Requires Go 1.22+ and Node.js 20+; packages with the desktop shell also need Rust stable (`-SkipDesktop` skips that step, but it must have been built once). Omitting `-Version` names the artifact `dev+<short commit hash>`.
+
 ## Docker
 
 The Compose configuration uses the published [`cnluminous/atom2api:latest`](https://hub.docker.com/r/cnluminous/atom2api) image from Docker Hub, so no local image build is required.

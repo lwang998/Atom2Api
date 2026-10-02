@@ -91,6 +91,18 @@ Copy-Item config.example.json config.json
 go run .
 ```
 
+## 打包
+
+仓库根目录提供一键打包脚本，产出“桌面 + 服务二合一”Windows 包（输出到 `dist/`）。**默认构建带 GitHub 更新链接**：
+
+```powershell
+.\package.ps1 -Version 1.0.12                # 标准包（含 GitHub 更新检查）
+.\package.ps1 -Version 1.0.12 -NoGitHub      # 分发版：移除 GitHub 地址与更新检查
+.\package.ps1 -Version 1.0.12 -SkipFrontend -SkipDesktop   # 复用上次前端/桌面构建
+```
+
+需要 Go 1.22+、Node.js 20+；含桌面壳的包还需要 Rust stable（`-SkipDesktop` 可跳过桌面构建，但需先构建过一次）。省略 `-Version` 时以 `dev+<提交短哈希>` 命名。
+
 ## Docker
 
 Compose 配置使用 Docker Hub 发布的 [`cnluminous/atom2api:latest`](https://hub.docker.com/r/cnluminous/atom2api) 镜像，无需在本地构建镜像。
