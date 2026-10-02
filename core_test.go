@@ -423,11 +423,23 @@ func TestAdminLoginUsesServerSessionCookie(t *testing.T) {
 	result := response.Result()
 	defer result.Body.Close()
 	cookies := result.Cookies()
-	if len(cookies) != 1 || cookies[0].Name != adminCookieName || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
-		t.Fatalf("cookies = %#v", cookies)
+	var sessionCookie, rememberCookie *http.Cookie
+	for _, cookie := range cookies {
+		switch cookie.Name {
+		case adminCookieName:
+			sessionCookie = cookie
+		case adminRememberCookie:
+			rememberCookie = cookie
+		}
+	}
+	if sessionCookie == nil || !sessionCookie.HttpOnly || sessionCookie.SameSite != http.SameSiteStrictMode {
+		t.Fatalf("session cookie = %#v", sessionCookie)
+	}
+	if rememberCookie == nil || rememberCookie.Value == "" {
+		t.Fatalf("remember cookie missing, cookies = %#v", cookies)
 	}
 	protectedRequest := httptest.NewRequest(http.MethodGet, "/api/accounts", nil)
-	protectedRequest.AddCookie(cookies[0])
+	protectedRequest.AddCookie(sessionCookie)
 	protectedResponse := httptest.NewRecorder()
 	auth.Require(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })).ServeHTTP(protectedResponse, protectedRequest)
 	if protectedResponse.Code != http.StatusNoContent {
