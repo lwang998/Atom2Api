@@ -12,12 +12,10 @@ import (
 	"time"
 )
 
-// Overridable at build time via -ldflags "-X main.githubLatestReleaseURL=
-// -X main.githubRepositoryURL=" to produce a distribution without any GitHub
-// address; empty values disable the online update check entirely.
-var (
-	githubLatestReleaseURL = "https://api.github.com/repos/lwang998/Atom2Api/releases/latest"
-	githubRepositoryURL    = "https://github.com/lwang998/Atom2Api"
+// The default update-check endpoints live in update_defaults.go (overridable
+// per build). Building with `-tags nogithub` compiles in empty values, which
+// disables the online update check and removes every GitHub address.
+const (
 	releaseCheckSuccessTTL = 30 * time.Minute
 	releaseCheckFailureTTL = 5 * time.Minute
 )
