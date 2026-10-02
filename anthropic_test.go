@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,6 +49,11 @@ func TestAnthropicToChatPayloadConvertsBlocksAndTools(t *testing.T) {
 	if len(tools) != 1 || tools[0]["type"] != "function" {
 		t.Fatalf("tools = %#v", tools)
 	}
+	function := tools[0]["function"].(map[string]any)
+	parameters := function["parameters"].(json.RawMessage)
+	if !strings.Contains(string(parameters), `"city"`) || !strings.Contains(string(parameters), `"string"`) {
+		t.Fatalf("tool parameters = %s", parameters)
+	}
 }
 
 func TestAnthropicStreamTranslationEmitsAnthropicEvents(t *testing.T) {
@@ -86,7 +92,7 @@ func TestAnthropicStreamTranslationEmitsAnthropicEvents(t *testing.T) {
 		"message_start",
 		"content_block_start", "content_block_delta", "content_block_stop", // thinking
 		"content_block_start", "content_block_delta", "content_block_stop", // text
-		"content_block_start", "content_block_delta", "content_block_delta", "content_block_stop", // tool_use
+		"content_block_start", "content_block_delta", "content_block_stop", // tool_use
 		"message_delta", "message_stop",
 	}
 	if strings.Join(events, "|") != strings.Join(expectOrder, "|") {
@@ -97,6 +103,28 @@ func TestAnthropicStreamTranslationEmitsAnthropicEvents(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("stream missing %s in:\n%s", want, joined)
 		}
+	}
+}
+
+func TestAnthropicStreamTranslationKeepsInterleavedToolArgumentsSeparate(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	e := &anthropicEmitter{w: recorder, flusher: recorder, tools: map[int]*anthropicStreamTool{}}
+	for _, chunk := range []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_0","function":{"name":"first","arguments":"{\"a\":"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_1","function":{"name":"second","arguments":"{\"b\":"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"1}"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"2}"}}]}}]}`,
+	} {
+		e.translateChunk([]byte(chunk))
+	}
+	e.flushTools()
+	e.closeBlock()
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"id":"call_0"`) || !strings.Contains(body, `"partial_json":"{\"a\":1}"`) {
+		t.Fatalf("first tool stream = %s", body)
+	}
+	if !strings.Contains(body, `"id":"call_1"`) || !strings.Contains(body, `"partial_json":"{\"b\":2}"`) {
+		t.Fatalf("second tool stream = %s", body)
 	}
 }
 

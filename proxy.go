@@ -114,11 +114,11 @@ func NewProxy(config *ConfigManager, store *Store, router *ModelRouter, oauth *O
 	}
 }
 
-func (p *Proxy) HandleModels(w http.ResponseWriter, _ *http.Request, _ APIKey) {
+func (p *Proxy) HandleModels(w http.ResponseWriter, _ *http.Request, key APIKey) {
 	models := p.router.Catalog()
 	data := make([]map[string]any, 0, len(models))
 	for _, model := range models {
-		if !model.Enabled || model.AccountCount == 0 {
+		if !model.Enabled || model.AccountCount == 0 || !modelAllowedForKey(model, key) {
 			continue
 		}
 		data = append(data, map[string]any{
@@ -126,6 +126,19 @@ func (p *Proxy) HandleModels(w http.ResponseWriter, _ *http.Request, _ APIKey) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+}
+
+func modelAllowedForKey(model ModelView, key APIKey) bool {
+	if len(key.AllowedModels) == 0 {
+		return true
+	}
+	for _, allowed := range key.AllowedModels {
+		allowed = trimContextSuffix(strings.TrimSpace(allowed))
+		if allowed == model.Alias || allowed == model.Upstream {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Proxy) HandleRequest(w http.ResponseWriter, r *http.Request, key APIKey) {

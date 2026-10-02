@@ -39,14 +39,15 @@ type anthropicRequest struct {
 }
 
 type anthropicBlock struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	Input     json.RawMessage `json:"input,omitempty"`
-	ToolUseID string          `json:"tool_use_id,omitempty"`
-	Content   json.RawMessage `json:"content,omitempty"`
-	Source    *struct {
+	Type        string          `json:"type"`
+	Text        string          `json:"text,omitempty"`
+	ID          string          `json:"id,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	InputSchema json.RawMessage `json:"input_schema,omitempty"`
+	ToolUseID   string          `json:"tool_use_id,omitempty"`
+	Content     json.RawMessage `json:"content,omitempty"`
+	Source      *struct {
 		Type      string `json:"type"`
 		MediaType string `json:"media_type"`
 		Data      string `json:"data"`
@@ -438,7 +439,10 @@ func anthropicToolsToOpenAI(raw json.RawMessage) ([]map[string]any, error) {
 		if tool.Name == "" {
 			continue
 		}
-		parameters := tool.Input
+		parameters := tool.InputSchema
+		if len(parameters) == 0 {
+			parameters = tool.Input
+		}
 		if len(parameters) == 0 {
 			parameters = json.RawMessage(`{"type":"object","properties":{}}`)
 		}
@@ -487,15 +491,22 @@ func anthropicStopReason(finish string) string {
 	}
 }
 
+type anthropicStreamTool struct {
+	id        string
+	name      string
+	arguments strings.Builder
+}
+
 // anthropicEmitter converts OpenAI chat chunks into Anthropic SSE events.
-// Anthropic streams carry at most one open content block at a time; blocks are
-// closed (and their index advanced) as soon as a different block type begins.
+// Tool calls are buffered until the upstream stream completes so interleaved
+// OpenAI tool indexes can be emitted as one valid Anthropic content block each.
 type anthropicEmitter struct {
 	w         http.ResponseWriter
 	flusher   http.Flusher
 	blockType string
 	blockIdx  int
-	toolSeen  map[int]bool
+	tools     map[int]*anthropicStreamTool
+	toolOrder []int
 }
 
 func (e *anthropicEmitter) raw(event string, payload any) {
@@ -526,6 +537,25 @@ func (e *anthropicEmitter) closeBlock() {
 	e.blockIdx++
 }
 
+func (e *anthropicEmitter) flushTools() {
+	for _, index := range e.toolOrder {
+		tool := e.tools[index]
+		if tool == nil {
+			continue
+		}
+		e.startBlock("tool_use", map[string]any{
+			"type": "tool_use", "id": tool.id, "name": tool.name, "input": map[string]any{},
+		})
+		if tool.arguments.Len() > 0 {
+			e.raw("content_block_delta", map[string]any{
+				"type":  "content_block_delta",
+				"index": e.blockIdx,
+				"delta": map[string]any{"type": "input_json_delta", "partial_json": tool.arguments.String()},
+			})
+		}
+	}
+}
+
 func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Response, model string, markFirstToken func()) (tokenUsage, string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -538,7 +568,7 @@ func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Re
 	w.Header().Del("Content-Length")
 	w.WriteHeader(http.StatusOK)
 
-	emitter := &anthropicEmitter{w: w, flusher: flusher, toolSeen: map[int]bool{}}
+	emitter := &anthropicEmitter{w: w, flusher: flusher, tools: map[int]*anthropicStreamTool{}}
 	emitter.raw("message_start", map[string]any{
 		"type": "message_start",
 		"message": map[string]any{
@@ -553,6 +583,7 @@ func (p *Proxy) streamAnthropicResponse(w http.ResponseWriter, response *http.Re
 	var stopReason string
 	errorText := ""
 	finalize := func() {
+		emitter.flushTools()
 		emitter.closeBlock()
 		if emitter.blockIdx == 0 {
 			// Anthropic responses must carry at least one content block.
@@ -663,21 +694,21 @@ func (e *anthropicEmitter) translateChunk(data []byte) (tokenUsage, string) {
 			})
 		}
 		for _, toolCall := range choice.Delta.ToolCalls {
-			isNew := !e.toolSeen[toolCall.Index]
-			if isNew {
-				e.toolSeen[toolCall.Index] = true
-				e.startBlock("tool_use", map[string]any{
-					"type": "tool_use", "id": toolCall.ID, "name": toolCall.Function.Name, "input": map[string]any{},
-				})
+			tool := e.tools[toolCall.Index]
+			if tool == nil {
+				tool = &anthropicStreamTool{id: toolCall.ID, name: toolCall.Function.Name}
+				e.tools[toolCall.Index] = tool
+				e.toolOrder = append(e.toolOrder, toolCall.Index)
 			}
-			if toolCall.Function.Arguments != "" && e.blockType == "tool_use" {
-				e.raw("content_block_delta", map[string]any{
-					"type":  "content_block_delta",
-					"index": e.blockIdx,
-					"delta": map[string]any{"type": "input_json_delta", "partial_json": toolCall.Function.Arguments},
-				})
+			if tool.id == "" {
+				tool.id = toolCall.ID
 			}
+			if tool.name == "" {
+				tool.name = toolCall.Function.Name
+			}
+			tool.arguments.WriteString(toolCall.Function.Arguments)
 		}
+
 		if choice.FinishReason != nil && *choice.FinishReason != "" {
 			stop = anthropicStopReason(*choice.FinishReason)
 		}
