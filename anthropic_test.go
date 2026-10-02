@@ -128,6 +128,67 @@ func TestAnthropicStreamTranslationKeepsInterleavedToolArgumentsSeparate(t *test
 	}
 }
 
+func TestAnthropicBufferedResponseMapsToolArguments(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		payload := `{"choices":[{"message":{"content":"","tool_calls":[` +
+			`{"id":"call_a","type":"function","function":{"name":"bash","arguments":"{\"command\":\"ls -la\"}"}},` +
+			`{"id":"call_b","type":"function","function":{"name":"noargs","arguments":""}},` +
+			`{"id":"call_c","type":"function","function":{"name":"broken","arguments":"{\"command\":"}}` +
+			`]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":9}}`
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer upstream.Close()
+	resp, err := upstream.Client().Get(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	recorder := httptest.NewRecorder()
+	proxy := &Proxy{}
+	usage, errorText := proxy.bufferedAnthropicResponse(recorder, resp, "glm5.3-flash")
+	if errorText != "" {
+		t.Fatalf("errorText = %q", errorText)
+	}
+	if usage.Input != 3 || usage.Output != 9 {
+		t.Fatalf("usage = %#v", usage)
+	}
+	var message struct {
+		Content []struct {
+			Type  string          `json:"type"`
+			ID    string          `json:"id"`
+			Input json.RawMessage `json:"input"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &message); err != nil {
+		t.Fatal(err)
+	}
+	if message.StopReason != "tool_use" {
+		t.Fatalf("stop_reason = %q, want tool_use", message.StopReason)
+	}
+	if len(message.Content) != 3 {
+		t.Fatalf("content blocks = %#v", message.Content)
+	}
+	wantInput := map[string]string{
+		"call_a": `{"command":"ls -la"}`,
+		"call_b": `{}`,
+		"call_c": `{"_raw_arguments":"{\"command\":"}`,
+	}
+	for _, block := range message.Content {
+		if block.Type != "tool_use" {
+			t.Fatalf("block type = %q, want tool_use", block.Type)
+		}
+		want, ok := wantInput[block.ID]
+		if !ok {
+			t.Fatalf("unexpected tool_use id %q", block.ID)
+		}
+		if string(block.Input) != want {
+			t.Fatalf("tool %s input = %s, want %s", block.ID, block.Input, want)
+		}
+	}
+}
+
 func TestAnthropicMessagesRecordsStreamingLatency(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

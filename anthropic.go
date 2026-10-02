@@ -750,10 +750,12 @@ func (p *Proxy) bufferedAnthropicResponse(w http.ResponseWriter, response *http.
 		content = append(content, map[string]any{"type": "text", "text": message.Content})
 	}
 	for _, toolCall := range message.ToolCalls {
-		var input any = map[string]any{}
+		input := map[string]any{}
 		if len(toolCall.Function.Arguments) > 0 {
 			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &input); err != nil {
-				input = map[string]any{}
+				// Surface malformed arguments instead of silently emitting {},
+				// which downstream clients report as "required parameter missing".
+				input = map[string]any{"_raw_arguments": toolCall.Function.Arguments}
 			}
 		}
 		content = append(content, map[string]any{
