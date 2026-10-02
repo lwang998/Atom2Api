@@ -147,6 +147,11 @@ func NewConfigManager(configPath string) (*ConfigManager, error) {
 
 	data, err := os.ReadFile(configPath)
 	if errors.Is(err, os.ErrNotExist) {
+		if dir := filepath.Dir(configPath); dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return nil, fmt.Errorf("create config directory: %w", err)
+			}
+		}
 		config, err := defaultConfig()
 		if err != nil {
 			return nil, err

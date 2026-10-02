@@ -28,7 +28,13 @@ fn main() {
             // The sidecar ships as atom2api-server.exe; naming it differently
             // from the shell (Atom2Api.exe) avoids the NTFS case-insensitive
             // filename collision between Atom2Api.exe and atom2api.exe.
-            let command = handle.shell().sidecar("atom2api-server")?.current_dir(workdir);
+            // ATOM2API_DESKTOP suppresses the server's own auto-open-browser
+            // behavior; this window IS the console.
+            let command = handle
+                .shell()
+                .sidecar("atom2api-server")?
+                .current_dir(workdir)
+                .env("ATOM2API_DESKTOP", "1");
             let (mut rx, child) = command.spawn()?;
             *handle.state::<ServerChild>().0.lock().unwrap() = Some(child);
             tauri::async_runtime::spawn(async move {

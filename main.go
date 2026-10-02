@@ -8,10 +8,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -39,15 +43,25 @@ func main() {
 		log.Fatal(err)
 	}
 
-	config, err := NewConfigManager(os.Getenv("ATOM2API_CONFIG"))
+	configPath, homeDefault := resolveConfigPath(os.Getenv("ATOM2API_CONFIG"))
+	config, err := NewConfigManager(configPath)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if homeDefault {
+		hideFolder(filepath.Dir(configPath))
 	}
 	config.Start(time.Second)
 	defer config.Close()
 	snapshot := config.Snapshot()
 
-	store, err := NewStore(snapshot.DataPath, config)
+	dataPath := resolveDataPath(snapshot.DataPath, configPath)
+	if dir := filepath.Dir(dataPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			log.Fatal(err)
+		}
+	}
+	store, err := NewStore(dataPath, config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,6 +152,10 @@ func main() {
 	}
 	log.Printf("Atom2Api is running at http://localhost%s", displayAddress(address))
 
+	if homeDefault && strings.TrimSpace(os.Getenv("ATOM2API_DESKTOP")) == "" {
+		go openConsoleWhenReady(address)
+	}
+
 	serverErrors := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -167,6 +185,75 @@ func displayAddress(address string) string {
 		return address
 	}
 	return "/ (listening on " + address + ")"
+}
+
+// resolveConfigPath decides where the configuration lives. An explicit
+// ATOM2API_CONFIG wins; a legacy ./config.json next to the working directory
+// keeps existing deployments untouched; otherwise the per-user hidden folder
+// is the default so a double-clicked executable works with no setup.
+func resolveConfigPath(env string) (path string, homeDefault bool) {
+	if strings.TrimSpace(env) != "" {
+		return env, false
+	}
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		return defaultConfigPath, false
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return filepath.Join(home, ".atom2api", defaultConfigPath), true
+	}
+	return defaultConfigPath, false
+}
+
+// resolveDataPath anchors a relative data_path to the config file's directory
+// so configs stored in ~/.atom2api keep their database beside them.
+func resolveDataPath(dataPath, configPath string) string {
+	if filepath.IsAbs(dataPath) {
+		return dataPath
+	}
+	base := filepath.Dir(configPath)
+	if base == "" || base == "." {
+		return dataPath
+	}
+	return filepath.Join(base, dataPath)
+}
+
+// hideFolder marks the per-user data folder hidden on Windows; dot-prefixed
+// names are already hidden on other platforms. Best-effort only.
+func hideFolder(dir string) {
+	if runtime.GOOS != "windows" || dir == "" || dir == "." {
+		return
+	}
+	_ = exec.Command("attrib", "+h", filepath.Clean(dir)).Start()
+}
+
+// openConsoleWhenReady waits for the HTTP port then opens the console in the
+// default browser, completing the double-click experience.
+func openConsoleWhenReady(address string) {
+	port := "8080"
+	if _, parsed, err := net.SplitHostPort(address); err == nil && parsed != "" {
+		port = parsed
+	} else if strings.HasPrefix(address, ":") {
+		port = strings.TrimPrefix(address, ":")
+	}
+	target := "http://127.0.0.1:" + port
+	for attempt := 0; attempt < 100; attempt++ {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), time.Second)
+		if err == nil {
+			_ = conn.Close()
+			var cmd *exec.Cmd
+			switch runtime.GOOS {
+			case "windows":
+				cmd = exec.Command("cmd", "/c", "start", "", target)
+			case "darwin":
+				cmd = exec.Command("open", target)
+			default:
+				cmd = exec.Command("xdg-open", target)
+			}
+			_ = cmd.Start()
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {

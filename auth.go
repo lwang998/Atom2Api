@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,7 +107,31 @@ func (a *AdminAuth) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"authenticated": a.Authenticated(r)})
 }
 
+// requestFromLoopback reports whether the request originates from the same
+// machine, letting a double-clicked instance skip the admin login. Forwarded
+// headers disable the bypass so a reverse proxy on localhost cannot extend it
+// to remote clients, and ATOM2API_REQUIRE_LOGIN=1 turns it off entirely.
+func requestFromLoopback(r *http.Request) bool {
+	if strings.TrimSpace(os.Getenv("ATOM2API_REQUIRE_LOGIN")) != "" {
+		return false
+	}
+	for _, header := range []string{"X-Forwarded-For", "X-Real-IP", "Forwarded"} {
+		if strings.TrimSpace(r.Header.Get(header)) != "" {
+			return false
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (a *AdminAuth) Authenticated(r *http.Request) bool {
+	if requestFromLoopback(r) {
+		return true
+	}
 	if cookie, err := r.Cookie(adminCookieName); err == nil && cookie.Value != "" {
 		now := time.Now()
 		a.mu.Lock()
