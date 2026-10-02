@@ -152,3 +152,29 @@ func TestRoundRobinRoutingDoesNotReuseFillBinding(t *testing.T) {
 		t.Fatalf("round-robin/random routes only used %#v", seen)
 	}
 }
+
+func TestResolveIgnoresContextSuffix(t *testing.T) {
+	_, store := newTestStore(t)
+	addRoutingAccount(t, store, "account-flash", "CodingPlan Lite", "glm5.3-flash")
+	router := NewModelRouter(store)
+	_, secret, err := store.CreateAPIKey("key-1", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, ok := store.AuthenticateAPIKey(secret)
+	if !ok {
+		t.Fatal("key authentication failed")
+	}
+	for _, requested := range []string{"glm5.3-flash", "glm5.3-flash[1m]", "glm5.3-flash[1M]"} {
+		route, err := router.Resolve(requested, key)
+		if err != nil {
+			t.Fatalf("Resolve(%q): %v", requested, err)
+		}
+		if route.Upstream != "glm5.3-flash" {
+			t.Fatalf("Resolve(%q) upstream = %q, want glm5.3-flash", requested, route.Upstream)
+		}
+	}
+	if _, err := router.Resolve("[1m]", key); err == nil {
+		t.Fatal("Resolve(\"[1m]\") should fail, not resolve to an empty model")
+	}
+}

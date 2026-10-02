@@ -144,8 +144,17 @@ func (r *ModelRouter) Resolve(requested string, key APIKey) (ModelRoute, error) 
 	return r.ResolveWithStrategy(requested, key, normalizeRouteStrategy(key.RouteStrategy))
 }
 
+// trimContextSuffix strips the [1m]/[1M] context-window marker some clients
+// append to model names, so the request resolves to the base upstream model.
+func trimContextSuffix(requested string) string {
+	if len(requested) >= 4 && strings.EqualFold(requested[len(requested)-4:], "[1m]") {
+		return strings.TrimSpace(requested[:len(requested)-4])
+	}
+	return requested
+}
+
 func (r *ModelRouter) ResolveWithStrategy(requested string, key APIKey, strategy string) (ModelRoute, error) {
-	requested = strings.TrimSpace(requested)
+	requested = trimContextSuffix(strings.TrimSpace(requested))
 	if requested == "" {
 		return ModelRoute{}, errors.New("model is required")
 	}
