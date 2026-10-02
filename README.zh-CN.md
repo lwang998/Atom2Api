@@ -4,6 +4,17 @@
 
 Atom2Api 将 AtomGit Coding Plan 账号统一转换为可供外部应用调用的 OpenAI 兼容接口，并提供账号、额度、密钥、模型路由和 Token 用量仪表盘。
 
+## 本 Fork 的改进（相对原版）
+
+本仓库由 [lwang998](https://github.com/lwang998/Atom2Api) 维护，在原版基础上：
+
+- **桌面双击即用**：内置 Tauri 桌面壳（`desktop/`）。Release 包解压后双击 `Atom2Api.exe` 即启动服务并打开控制台窗口，关闭窗口即全部退出；服务端独立运行时也会自动打开控制台网页。
+- **零配置**：配置与数据库默认存放在用户目录的 `.atom2api` 隐藏文件夹（Windows 自动加隐藏属性），首次启动自动生成，升级替换程序免迁移数据。
+- **本机免登录**：本机访问管理台无需输入密码；局域网/公网访问仍需密码，反向代理场景可设 `ATOM2API_REQUIRE_LOGIN=1` 强制全部走密码登录。
+- **修复原版工具调用 bug**：Claude Code 等客户端中所有带参数工具报 `required parameter missing` 的问题（流式 `tool_use` 参数分片被丢弃），详见下方「工具调用修复记录」。
+- **Anthropic 兼容端点**：`/v1/messages`、`/v1/messages/count_tokens`，Claude Code、Cherry Studio 等客户端直连。
+- **更新检查指向本 fork**：管理台“系统设置”的版本检查与更新日志基于本仓库的 Release。
+
 ## 安全警告
 
 > [!WARNING]
@@ -25,6 +36,7 @@ Atom2Api 将 AtomGit Coding Plan 账号统一转换为可供外部应用调用�
 - Coding Plan：按 `Max -> Pro -> Lite` 领取，读取订阅类型、滚动额度、到期时间、模型目录和 60 天用量
 - OpenAI 兼容端点：`/v1/models`、`/v1/chat/completions`、`/v1/responses`、`/v1/completions`、`/v1/embeddings`
 - Anthropic 兼容端点：`/v1/messages`、`/v1/messages/count_tokens`，Claude Code、Cherry Studio 等客户端直连（见下文）
+- 桌面双击即用：Tauri 桌面壳 + 服务二合一包，配置数据收于 `~/.atom2api` 隐藏目录，本机免登录
 - 流式代理：SSE 即时转发，自动请求 `include_usage`，记录输入、输出、缓存和推理 tokens
 - 多账号路由：支持按请求随机轮询，或按 API Key + 模型填充固定账号
 - 账号凭据迁移：从账号管理导出 OAuth 凭据包，在另一台设备导入并自动同步账号

@@ -4,6 +4,17 @@ English | [简体中文](./README.zh-CN.md)
 
 Atom2Api exposes AtomGit Coding Plan accounts through an OpenAI-compatible API for external applications. It also provides dashboards for accounts, quotas, API keys, model routing, and token usage.
 
+## What This Fork Improves
+
+This repository is maintained by [lwang998](https://github.com/lwang998/Atom2Api). On top of the original project it adds:
+
+- **Desktop double-click experience**: a bundled Tauri shell (`desktop/`). Unzip the release, double-click `Atom2Api.exe`, and the service starts with the console window opened; closing the window stops everything. The standalone server also opens the console in your browser automatically.
+- **Zero configuration**: config and the database live in a hidden `.atom2api` folder under your user profile (hidden attribute applied on Windows), generated on first launch — replacing the executable never requires migrating data.
+- **No login on localhost**: the admin console opens without a password when accessed from the same machine; LAN/remote access still requires the password, and `ATOM2API_REQUIRE_LOGIN=1` forces password login everywhere (recommended behind a reverse proxy).
+- **Fixes an upstream tool-call bug**: parameterized tools failing with `required parameter missing` in Claude Code and similar clients (streaming `tool_use` argument fragments were dropped) — see "Tool call fixes (2026-10-02)" below.
+- **Anthropic-compatible endpoints**: `/v1/messages` and `/v1/messages/count_tokens` for direct Claude Code / Cherry Studio integration.
+- **Update checks point to this fork**: the console's version check and changelog follow this repository's releases.
+
 ## Security Warning
 
 > [!WARNING]
@@ -25,6 +36,7 @@ Atom2Api exposes AtomGit Coding Plan accounts through an OpenAI-compatible API f
 - Coding Plan: claims plans in `Max -> Pro -> Lite` order and reads subscription type, rolling quota, expiry time, model catalog, and 60-day usage
 - OpenAI-compatible endpoints: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/completions`, and `/v1/embeddings`
 - Anthropic-compatible endpoints: `/v1/messages` and `/v1/messages/count_tokens` for direct Claude Code, Cherry Studio, and other Anthropic-protocol clients (see below)
+- Desktop double-click experience: Tauri shell + server in a single package, data in a hidden `~/.atom2api` folder, no login on localhost
 - Streaming proxy: forwards SSE in real time, automatically requests `include_usage`, and records input, output, cached, and reasoning tokens
 - Multi-account routing: supports per-request random routing or sticky per-key, per-model account filling
 - Account credential migration: exports an OAuth credential bundle from Accounts and imports it on another device before synchronizing the account
