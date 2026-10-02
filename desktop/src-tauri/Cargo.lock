@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "atom2api-desktop"
-version = "1.0.10"
+version = "1.0.11"
 dependencies = [
  "tauri",
  "tauri-build",

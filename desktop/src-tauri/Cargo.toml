@@ -1,6 +1,6 @@
 [package]
 name = "atom2api-desktop"
-version = "1.0.10"
+version = "1.0.11"
 description = "Atom2Api desktop shell: runs the atom2api server as a sidecar and shows its console"
 edition = "2021"
 
